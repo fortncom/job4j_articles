@@ -6,10 +6,7 @@ import ru.job4j.articles.model.Article;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.SQLException;
-import java.sql.Statement;
+import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
@@ -57,13 +54,14 @@ public class ArticleStore implements Store<Article>, AutoCloseable {
     public Article save(Article model) {
         LOGGER.info("Сохранение статьи");
         var sql = "insert into articles(text) values(?)";
-        try (var statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+        try (PreparedStatement statement = connection.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
             statement.setString(1, model.getText());
             statement.executeUpdate();
-            var key = statement.getGeneratedKeys();
-            while (key.next()) {
+            try (ResultSet key = statement.getGeneratedKeys()) {
+            if (key.next()) {
                 model.setId(key.getInt(1));
             }
+        }
         } catch (Exception e) {
             LOGGER.error("Не удалось выполнить операцию: { }", e.getCause());
             throw new IllegalStateException();
@@ -77,12 +75,13 @@ public class ArticleStore implements Store<Article>, AutoCloseable {
         var sql = "select * from articles";
         var articles = new ArrayList<Article>();
         try (var statement = connection.prepareStatement(sql)) {
-            var selection = statement.executeQuery();
-            while (selection.next()) {
-                articles.add(new Article(
-                        selection.getInt("id"),
-                        selection.getString("text")
-                ));
+            try (var selection = statement.executeQuery()) {
+                while (selection.next()) {
+                    articles.add(new Article(
+                            selection.getInt("id"),
+                            selection.getString("text")
+                    ));
+                }
             }
         } catch (Exception e) {
             LOGGER.error("Не удалось выполнить операцию: { }", e.getCause());
